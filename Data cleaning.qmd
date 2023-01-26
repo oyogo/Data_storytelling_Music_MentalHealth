@@ -10,8 +10,7 @@ editor: visual
 
 ```{r}
 library(data.table)
-library(stringr)
-library(dplyr)
+library(tidyverse)
 ```
 
 ### Import data  
@@ -47,8 +46,77 @@ colnames(music) <- str_replace_all(colnames(music),"[:punct:]|[:space:]","")
 ```
 
 ### Data cleaning - missing values   
+get the rows which has missing values
+```{r}
+music[!complete.cases(music),]
+```
+The result of the above code returns a whole 107 rows with missing values.
+There are two primary ways of dealing with missing values.
+* Imputation with mean, median or mode.
+* Drop either the rows or columns with missing values.
 
+The approach to use really depends on your data, the type of data and where the missing values are occurring. 
+For this case we can spot missing values in both numeric and categorical variables. First of all seeing that the records with missing values are quite a number which might significantly affect our data, I'll take approach one, imputation as opposed to dropping the records.
+Secondly, given that the missing values occur in both categorical and numeric variables, I'll impute the numerical variables with the mean and the categorical ones with the mode.  
+
+To achieve that, I'll have to confirm if the data types are correctly labelled, as in, numeric variables are labelled as such and the categorical ones respectively, after which we can now use functions for imputation. 
+
+Some bit of data preparation before imputation  
+```{r}
+  # get the structure of our dataframe with the variable data types.
+  str(music)
+
+  # All the variables seem to be correctly labelled, we can now proceed with the imputation.
+  # collect numeric variables. 
+  col_dtypes <- lapply(music, class)
+
+  # convert them to a dataframe
+  col_dtypes_frame <- data.frame(unlist(col_dtypes))
+  
+  # the variables have been registered as rownames yet we want them as a column, we'll have to change that for ease of manipulation: filtering
+   col_dtypes_frame <- col_dtypes_frame %>% rownames_to_column()
+  
+   # change the column names 
+  names(col_dtypes_frame) <- c("col_names","col_datatype")
+  
+  # convert to data.table 
+  col_datatype <- setDT(col_dtypes_frame)
+  # collect numeric and integer columns
+  num_vars <- col_datatype[col_datatype %in% c("numeric","integer"),.(col_names)]
+  v <- num_vars$col_names
+  # categorical variables
+  cat_vars <- col_dtypes_frame[col_datatype=="character",.(col_names)]
+  catvars <- cat_vars$col_names
+```
+
+Imputation  
 ```{r}
 
+music <- setDT(music)
+# loop through the numeric columns and replace na values with mean of the same column in which the na appears.
+for (coll in v){
+
+ music <-  music[, (coll) := lapply(coll, function(x) {
+    x <- get(x)
+    x[is.na(x)] <- mean(x, na.rm = TRUE)
+    x
+  })]
+
+}
+
+# create custom function to get the mode of a column
+my_mode <- function (x, na.rm) {
+  xtab <- table(x)
+  xmode <- names(which(xtab == max(xtab)))
+  if (length(xmode) > 1) xmode <- ">1 mode"
+  return(xmode)
+}
+
+# loop through the character columns and replace na/null values with mode of the same column in which the na/null appears.
+for (cat_coll in catvars) {
+  music <- as.data.frame(music)
+  music[music[,cat_coll]=="",cat_coll] <- my_mode(music[,cat_coll], na.rm = TRUE)
+
+}
 ```
 

@@ -1,0 +1,54 @@
+---
+title: "Data cleaning"
+format: html
+editor: visual
+---
+
+## Data cleaning  
+
+### Load libraries for munging    
+
+```{r}
+library(data.table)
+library(stringr)
+library(dplyr)
+```
+
+### Import data  
+
+```{r}
+music <- fread("data/Music_and_Mental_Health_-_Survey.csv")
+```
+
+### Quick inspection   
+```{r}
+str(music)
+
+# running the above command not only shows us the number of records and variables in the data, but we're also able to 
+# have a look at the variable names. We note that some column names do not follow R naming convention, they have special characters ([,],&) and spaces. We will need to fix that!
+```
+
+### Data cleaning  - variable names  
+
+Let us begin by dropping all special characters ([,],&) 
+```{r}
+# I can only see one & on the names (on the R&B), let's begin by replacing it with 'n'. 
+# I chose to start with that so that I have easy time replacing the [,] special characters with one command. 
+names(music)[names(music) %like% "&"] <- "Frequency_RnB" 
+
+# At the end, after renaming the variables, I'd like to have them in the format of: Frequency_RnB 
+
+```
+
+Next we will now drop the rest of the special characters and white spaces: [,]    
+```{r}
+#music <- music %>% rename_with(~str_remove(.x,'^\\d+\\. '))
+colnames(music) <- str_replace_all(colnames(music),"[:punct:]|[:space:]","")
+```
+
+### Data cleaning - missing values   
+
+```{r}
+
+```
+

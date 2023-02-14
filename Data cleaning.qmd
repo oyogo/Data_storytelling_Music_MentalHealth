@@ -279,3 +279,14 @@ age_hours %>%
   
 ```
 
+4. Which genre of music is best for improved mental health?  
+Select the Favgenre and Musiceffects columns and visualize with a bar graph   
+
+```{r}
+favgenre_effects <- setDT(music)[,c(total_respondents=.N), by=c("Favgenre","Musiceffects")]
+```
+
+```{r}
+
+```
+

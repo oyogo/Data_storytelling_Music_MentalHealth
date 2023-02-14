@@ -22,22 +22,21 @@ music <- fread("data/Music_and_Mental_Health_-_Survey.csv")
 ### Quick inspection   
 ```{r}
 str(music)
-
-# running the above command not only shows us the number of records and variables in the data, but we're also able to 
-# have a look at the variable names. We note that some column names do not follow R naming convention, they have special characters ([,],&) and spaces. We will need to fix that!
 ```
+
+Running the above command not only shows us the number of records and variables in the data, but we're also able to have a look at the variable names. We note that some column names do not follow R naming convention, they have special characters ([,],&) and spaces. We will need to fix that!
 
 ### Data cleaning  - variable names  
 
-Let us begin by dropping all special characters ([,],&) 
+Let us begin by dropping all special characters ([,],&).
+I can only see one & on the names (on the R&B), let's begin by replacing it with 'n'.I chose to start with that so that I have easy time replacing the [,] special characters with one command. 
 ```{r}
-# I can only see one & on the names (on the R&B), let's begin by replacing it with 'n'. 
-# I chose to start with that so that I have easy time replacing the [,] special characters with one command. 
+
 names(music)[names(music) %like% "&"] <- "Frequency_RnB" 
 
-# At the end, after renaming the variables, I'd like to have them in the format of: Frequency_RnB 
-
 ```
+At the end, after renaming the variables, I'd like to have them in the format of: Frequency_RnB 
+
 
 Next we will now drop the rest of the special characters and white spaces: [,]    
 ```{r}
@@ -89,7 +88,22 @@ Some bit of data preparation before imputation
   catvars <- cat_vars$col_names
 ```
 
-Imputation  
+##### Some necessary *digression*   
+Its crucial to note that sometimes missing values are represented with -9999,-999,9999. This is an 'ancient' convention that sought to represent numeric vectors as numeric vectors seeing that a numeric field shouldn't/cannot store alphanumeric characters such as 'NA', some code has to be used and that's what brings about -999/-9999 representation. However, its important to note that the representation of missing values as -999/-9999 is not obvious as we can truly have a -999/-9999 value in a vector. And to single that out you might need to do further checks such as reading the data documentation or even enquiry with the dataset owners.   
+
+Therefore, much as this is an earlier form of representing missing values, some softwares still use that convention and if you're not keen then your analyses can be quite messed up. Like for our case, a keen look through the BPM column we can spot such values and we need to fix that. 
+
+Well, you might be wondering how this came to my attention, the answer to that is, after doing the imputation of missing numeric values with the mean of the respective column, I noticed quite some large numbers for the missing values under the BPM column and that raised my eyebrows, upon further investigation then I realized from the original dataset that there was one entry with a 999999 value which led to the rather huge average. I presumed that this could potentially be a representation of missing value.   
+
+```{r}
+music$BPM[music$BPM == 999999999] <- NA
+```
+
+
+#### Imputation  
+For numeric variables - impute missing values with the mean
+For categorical variables - replace with mode 
+
 ```{r}
 
 music <- setDT(music)
@@ -118,5 +132,150 @@ for (cat_coll in catvars) {
   music[music[,cat_coll]=="",cat_coll] <- my_mode(music[,cat_coll], na.rm = TRUE)
 
 }
+```
+
+
+## Handling outliers
+An outlier is anything (person/thing) that differs with the other members, for our case, we're referring to data points which are situated away from the rest of the points. Outliers handling is an essential process in data preparation for the reason that they do affect outcome of analysis and modelling hence the need to handle them. 
+There are different ways to handle outliers and the method really depends on the data you're dealing with, some of the approaches are:
+
+* Removing outliers.   
+* Replacing them with the mode.    
+* Winsorization (replacing them with the maximum value).    
+
+To be able to handle the outlier problem, you first of all need to find them, rather confirm if there are outliers in your dataset and to achieve this we have the below methods used to detect outliers:
+
+* Boxplot   
+* Histogram   
+* Statistical tests : Grubbs’s test, Dixon’s test, Rosner’s test.  
+* Hampel filters method   
+* Grubbs test   
+
+Plus other tests which I may not be aware of. 
+Let's use a box plot for now but you can explore the other approaches if you wish.  
+We'll first of all collect all numeric variables and then plot box plots for each.  
+
+```{r}
+
+```
+
+
+We can now poke some questions on our dataset to help us get some insights to inform suggestions and solutions to the problems the survey seeks to answer. 
+
+Questions 
+1. Does listening to music while working improve mental health?
+The variable *Whileworking* is categorical and so is the *Musiceffects*.
+
+```{r}
+
+mat <- music
+mat <- mat[,c("Whileworking","Musiceffects")]
+mat <- setDT(mat)[,.(count=.N),by=.(Whileworking,Musiceffects)]
+
+# mat <- dcast(mat,Whileworking ~ Musiceffects, value.var = "count")
+# mat <- mat %>% remove_rownames() %>% column_to_rownames(var = "Whileworking")
+# mat <- as.matrix(mat)
+
+```
+
+To explore the data visually we can use a sankey diagram 
+
+```{r}
+library(networkD3)
+
+# From these flows we need to create a node data frame: it lists every entities involved in the flow
+nodes <- data.frame(
+  name=c(as.character(mat$Whileworking), 
+  as.character(mat$Musiceffects)) %>% unique()
+)
+ 
+# With networkD3, connection must be provided using id, not using real name like in the links dataframe.. So we need to reformat it.
+mat$IDsource <- match(mat$Whileworking, nodes$name)-1 
+mat$IDtarget <- match(mat$Musiceffects, nodes$name)-1
+ 
+# Make the Network
+p <- sankeyNetwork(Links = mat, Nodes = nodes,
+              Source = "IDsource", Target = "IDtarget",
+              Value = "count", NodeID = "name", 
+              sinksRight=FALSE)
+p
+
+# add titles for the nodes
+htmlwidgets::onRender(p, '
+  function(el) { 
+    var cols_x = this.sankey.nodes().map(d => d.x).filter((v, i, a) => a.indexOf(v) === i).sort(function(a, b){return a - b});
+    var labels = ["Do you listen to music while working", "Music effects"];
+    cols_x.forEach((d, i) => {
+      d3.select(el).select("svg")
+        .append("text")
+        .attr("x", d)
+        .attr("y", 12)
+        .text(labels[i]);
+    })
+  }
+')
+```
+Its interesting to note that most people listen to music while working. Further, we note that there's quite a significant comparison in terms of numbers of those who confessed to have had an improvement in their mental health as compared to those who responded with a no-effect and worsen. 
+And so to our question, we can confidently say *YES*, listening to music while working seems to have an effect on mental health!
+
+2. What's the primary streaming service for those who listen to music and how many hours on average does someone spend listening to music?
+
+```{r}
+str_service <- setDT(music)[,.(totals=.N), by=c("Primarystreamingservice")]
+```
+
+A bubble chart could be of help here
+```{r}
+
+library(plotly)
+str_service %>%
+plot_ly() %>%
+        add_trace(x = ~reorder(Primarystreamingservice, totals), 
+                  y = ~totals,
+                  size = ~totals,
+                  color = ~Primarystreamingservice,
+                  alpha = 1,
+                  #sizes = c(200,4000),
+                  type = "scatter",
+                  mode = "markers",
+                  marker = list(symbol = 'circle', sizemode = 'diameter',
+                                line = list(width = 2, color = '#FFFFFF'), opacity=1)) %>%
+        add_text(x = ~reorder(Primarystreamingservice, -totals), 
+                        y = ~Primarystreamingservice, text = ~totals,
+                        showarrow = FALSE,
+                        color = I("black")) %>%
+        layout(
+          showlegend = FALSE,
+          title="What streaming service is mostly prefered?",
+          xaxis = list(
+            title = "Primary streaming service"
+          ),
+          yaxis = list(
+            title = "Total number of respondents"
+          )
+        ) %>%
+        config(displayModeBar = FALSE, displaylogo = FALSE, 
+              scrollZoom = FALSE, showAxisDragHandles = TRUE, 
+              showSendToCloud = FALSE)
+```
+
+The gap between the most preferred streaming service and the immediate one is huge, almost 4 times! 
+It leaves us with the question why Spotify stands that tall. 
+
+3. Has Age anything to with the streaming hours
+
+```{r}
+age_hours <- music[,c("Age","Hoursperday","Whileworking")]
+```
+
+Let's explore this using a scatter plot to see if there's any correlation
+
+```{r}
+library(ggplot2)
+
+age_hours %>% 
+  ggplot(aes(x = Age, y= Hoursperday, color = Whileworking)) +
+  geom_jitter()
+  
 ```
 

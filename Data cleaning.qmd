@@ -286,7 +286,116 @@ Select the Favgenre and Musiceffects columns and visualize with a bar graph
 favgenre_effects <- setDT(music)[,c(total_respondents=.N), by=c("Favgenre","Musiceffects")]
 ```
 
+Music genres and their effect
 ```{r}
+ggplot() +
+  geom_bar(data=filter(favgenre_effects, Musiceffects == "Improve"),
+           aes(x = reorder(Favgenre,V1),y = V1, fill = Musiceffects), stat="identity", position = 'stack') +
+  geom_bar(data = filter(favgenre_effects, Musiceffects == "Worsen"),
+           aes(x = Favgenre, y = -V1, fill = Musiceffects), stat = "identity", position = 'stack') +
+  labs(y = "Total number of respondents", x = "Favourite music genre") +
+  coord_flip() +
+  geom_hline(yintercept = 0, linetype = "dashed") +
+  scale_fill_manual(values = c("#bebada","#8dd3c7"))
+  
+  
+```
+
+Hours spent listening to music per day on average
+```{r}
+library(ggpubr)
+library(cowplot)
+hrs_effect <- music[,c("Hoursperday","Musiceffects")]
+
+gghistogram(hrs_effect, x = "Hoursperday", add = "mean", rug = TRUE,fill = "Musiceffects",palette = c("#bebada","#ffffb3","#8dd3c7"))
+```
+Average hours spent listening to music per day with respect to the effects
+
+```{r}
+hrs_effect <- music[, .(avg_hrs = round(mean(Hoursperday),0)), by=.(Favgenre,Musiceffects)]
+```
+
+Genres and insomnia   
+```{r}
+genre_insomnia <- music[,.(avg_insomnia_rating = round(mean(Insomnia),0)), by = .(Favgenre)]   
+
+ggplot(genre_insomnia,aes(x = reorder(Favgenre,-avg_insomnia_rating), y = avg_insomnia_rating)) +
+  geom_col() 
+```
+
+
+```{r}
+sankey_data <- music[,average_hours := round(mean(Hoursperday),2), by=.(Favgenre,Musiceffects)][,.(Favgenre,Musiceffects,Hoursperday,average_hours)]
+
+sankey_hrs_range <- sankey_data[,hours_range := cut(average_hours, breaks = c(1,2,4,6,8,10,12,14,16,18,20,22,24))]
+sankey_hrs_range$hours_range <- gsub("\\(","",sankey_hrs_range$hours_range)
+sankey_hrs_range$hours_range <- gsub("\\]","",sankey_hrs_range$hours_range)
+sankey_hrs_range$hours_range <- gsub(","," - ",sankey_hrs_range$hours_range)
+
+sankey_order_hrs <- sankey_hrs_range[,order := floor(average_hours)][order(average_hours)]
+
+order_hours <- sankey_order_hrs[unique(order)][,index := .I][,c("order","index")]
+
+
+order_genre <- sankey_hrs_range %>%
+  group_by(Favgenre) %>%
+  summarise(avg_hrs = mean(Hoursperday)) %>%
+  ungroup() %>%
+  arrange(avg_hrs) %>%
+  distinct(Favgenre) %>%
+  mutate(index_ind = row_number())
+
+order_effect <- sankey_hrs_range %>%
+  mutate(Musiceffects = fct_relevel(Musiceffects, c("Improve", "No effect", "Worsen"))) %>%
+  distinct(Musiceffects) %>%
+  mutate(index_edu = as.numeric(Musiceffects))
+
+sankey_hrs_range <- sankey_hrs_range %>%
+  left_join(order_hours) %>%
+  left_join(order_genre) %>%
+  left_join(order_effect)
+
+salary_industry <- salary_range %>%
+  mutate(group = glue("{industry}-{salary}")) %>%
+  mutate(group2 = glue("{education}-{salary}"))
+
+```
+
+```{r}
+
+ library(plotly)
+
+fig <- plot_ly(
+    type = "sankey",
+    orientation = "h",
+
+    node = list(
+      label = c("A1", "A2", "B1", "B2", "C1", "C2"),
+      color = c("blue", "blue", "blue", "blue", "blue", "blue"),
+      pad = 15,
+      thickness = 20,
+      line = list(
+        color = "black",
+        width = 0.5
+      )
+    ),
+
+    link = list(
+      source = c(0,1,0,2,3,3),
+      target = c(2,3,3,4,4,5),
+      value =  c(8,4,2,8,4,2)
+    )
+  )
+fig <- fig %>% layout(
+    title = "Basic Sankey Diagram",
+    font = list(
+      size = 10
+    )
+)
+
+fig
+
+
 
 ```
 
